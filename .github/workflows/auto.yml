@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.10'
 
-- name: Run main script
+      - name: Run main script
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
