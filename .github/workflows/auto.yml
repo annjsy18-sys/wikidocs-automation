@@ -1,0 +1,29 @@
+name: Blog Auto Poster
+
+on:
+  schedule:
+    # 한국 시간 기준 매일 낮 12시 (UTC 시간 기준 새벽 3시)
+    - cron: '0 3 * * *'
+  workflow_dispatch: 
+
+jobs:
+  run-blog-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run main script
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        run: |
+          python main.py
