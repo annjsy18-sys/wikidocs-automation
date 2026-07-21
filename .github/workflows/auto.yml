@@ -26,5 +26,7 @@ jobs:
       - name: Run main script
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
         run: |
           python coupang_api.py 노트북 TV 제습기 텀블러 무선청소기
