@@ -19,15 +19,16 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+    run: |
+      python -m pip install --upgrade pip
+      pip install requests
+      npm install -g @anthropic-ai/claude-code
 
-      - name: Run main script
-        env:
-          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }} 
-          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
-          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
-        run: |
-          chmod +x daily_batch.sh run.sh
-          ./daily_batch.sh "01" 10
+  - name: Run main script
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+      COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+    run: |
+      chmod +x daily_batch.sh run.sh
+      ./daily_batch.sh "01" 10
