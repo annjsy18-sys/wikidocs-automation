@@ -18,10 +18,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-
       - name: Run main script
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
