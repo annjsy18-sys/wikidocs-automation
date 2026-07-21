@@ -27,4 +27,4 @@ jobs:
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
-          python coupang_api.py
+          python coupang_api.py 노트북 TV 제습기 텀블러 무선청소기
