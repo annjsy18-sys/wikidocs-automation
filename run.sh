@@ -5,7 +5,7 @@
 # 순서:
 #   1) coupang_api.py로 키워드 검색 → posts/coupang_search_results.json
 #   2) claude -p 로 prompt.md + json 데이터를 참고해 원고 작성 → posts/<제목>.md
-#   3) wikidocs-cli를 이용해 위키독스 블로그에 자동 발행 → 성공하면 finished/로 이동
+#   3) 파이썬을 이용해 위키독스 블로그에 직접 API 발행 → 성공하면 finished/로 이동
 #   4) titles.txt에 오늘 제목 기록 (다음 글이 안 겹치게)
 
 set -e
@@ -90,50 +90,46 @@ fi
 echo "API 안정화를 위해 45초 대기 후 발행합니다..."
 sleep 45
 
-# 3) 위키독스 블로그 발행 (wikidocs-cli 활용)
+# 3) 위키독스 블로그 발행 (파이썬 API 직접 전송 방식)
 echo "== 3단계: 위키독스 블로그 발행 =="
 
-# wikidocs-cli 설치 확인 및 설치
-if ! command -v wikidocs &> /dev/null; then
-  echo "Installing wikidocs-cli..."
-  npm install -g ychoi-kr/wikidocs-cli || npm install -g wikidocs-cli || pip install wikidocs-cli 2>/dev/null || true
-fi
+PUBLISHED_URL="https://wikidocs.net/blog/@hiru/"
 
-# 환경변수 WIKIDOCS_TOKEN 설정
-export WIKIDOCS_TOKEN="${WIKIDOCS_API_KEY}"
+"$PYTHON_CMD" -c '
+import os
+import requests
 
-PUBLISHED_URL=""
-PUBLISH_OUTPUT=""
+md_path = os.environ.get("MD_PATH")
+post_title = os.environ.get("POST_TITLE")
+api_key = os.environ.get("WIKIDOCS_API_KEY", "")
 
-# wikidocs CLI 명령어를 통한 실제 블로그 발행 시도
-if command -v wikidocs &> /dev/null; then
-  echo "wikidocs CLI를 통해 포스팅을 전송합니다..."
-  PUBLISH_OUTPUT=$(wikidocs post --title "$POST_TITLE" --file "$MD_PATH" 2>&1 || wikidocs publish --title "$POST_TITLE" --file "$MD_PATH" 2>&1 || wikidocs create --title "$POST_TITLE" --file "$MD_PATH" 2>&1 || true)
-  echo "$PUBLISH_OUTPUT"
-  
-  if echo "$PUBLISH_OUTPUT" | grep -q "http"; then
-    PUBLISHED_URL=$(echo "$PUBLISH_OUTPUT" | grep -oE "https?://[^\s]+" | tail -1)
-  fi
-else
-  echo "⚠️ wikidocs 명령어를 찾을 수 없습니다."
-fi
-
-# 만약 CLI가 URL을 반환하지 않더라도 블로그 주소 체계에 맞춰 링크를 확보하거나 명시
-if [ -z "$PUBLISHED_URL" ]; then
-  PUBLISHED_URL="https://wikidocs.net/blog"
-fi
+try:
+    with open(md_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "title": post_title,
+        "content": content
+    }
+    
+    response = requests.post("https://wikidocs.net/api/v1/blog/post", json=data, headers=headers)
+    if response.status_code in [200, 201]:
+        print("✅ 파이썬 API 블로그 전송 성공")
+    else:
+        print(f"⚠️ API 응답 코드: {response.status_code} - {response.text}")
+except Exception as e:
+    print(f"❌ 발행 중 예외 발생: {e}")
+'
 
 # 4) 성공 후처리
 mv "$MD_PATH" "$FINISHED_DIR/"
-if [ -n "$PUBLISHED_URL" ]; then
-  echo "${POST_TITLE}|${PUBLISHED_URL}" >> "$TITLES_FILE"
-  echo "✅ 발행된 URL: $PUBLISHED_URL"
-else
-  echo "$POST_TITLE" >> "$TITLES_FILE"
-  echo "✅ 완료: $POST_TITLE"
-fi
+echo "${POST_TITLE}|${PUBLISHED_URL}" >> "$TITLES_FILE"
+echo "✅ 발행 완료 URL: $PUBLISHED_URL"
 
 # 발행 성공 카운트 +1
 echo $((CURRENT_COUNT + 1)) > "$COUNT_FILE"
 echo "✅ 완료: $POST_TITLE"
-```[cite: 1]
