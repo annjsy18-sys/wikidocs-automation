@@ -5,7 +5,7 @@
 # 순서:
 #   1) coupang_api.py로 키워드 검색 → posts/coupang_search_results.json
 #   2) claude -p 로 prompt.md + json 데이터를 참고해 원고 작성 → posts/<제목>.md
-#   3) 파이썬을 이용해 위키독스 블로그에 직접 API 발행 → 성공하면 finished/로 이동
+#   3) 완성된 마크다운 파일을 finished/로 이동 및 titles.txt 기록 (수동 발행 지원용)
 #   4) titles.txt에 오늘 제목 기록 (다음 글이 안 겹치게)
 
 set -e
@@ -87,54 +87,14 @@ if [ ! -f "$MD_PATH" ]; then
   exit 1
 fi
 
-echo "API 안정화를 위해 45초 대기 후 발행합니다..."
-sleep 45
-
-# 3) 위키독스 블로그 발행 (파이썬 API 직접 전송 방식)
-echo "== 3단계: 위키독스 블로그 발행 =="
-
+# 3) 마크다운 원고 완성 처리 (finished 폴더로 이동하여 웹에서 안전하게 발행 가능하도록 준비)
+echo "== 3단계: 원고 완성 및 준비 =="
 PUBLISHED_URL="https://wikidocs.net/blog/@hiru/"
 
-# 환경변수를 명확히 전달하도록 수정
-MD_PATH="$MD_PATH" POST_TITLE="$POST_TITLE" WIKIDOCS_API_KEY="$WIKIDOCS_API_KEY" "$PYTHON_CMD" -c '
-import os
-import requests
-
-md_path = os.environ.get("MD_PATH")
-post_title = os.environ.get("POST_TITLE")
-api_key = os.environ.get("WIKIDOCS_API_KEY", "")
-
-try:
-    if not md_path or not os.path.exists(md_path):
-        print(f"❌ 마크다운 파일을 찾을 수 없습니다: {md_path}")
-    else:
-        with open(md_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "title": post_title,
-            "content": content
-        }
-        
-        response = requests.post("https://wikidocs.net/api/v1/blog/post", json=data, headers=headers)
-        if response.status_code in [200, 201]:
-            print("✅ 파이썬 API 블로그 전송 성공")
-        else:
-            print(f"⚠️ API 응답 코드: {response.status_code} - {response.text}")
-except Exception as e:
-    print(f"❌ 발행 중 예외 발생: {e}")
-'
-
-# 4) 성공 후처리
 mv "$MD_PATH" "$FINISHED_DIR/"
 echo "${POST_TITLE}|${PUBLISHED_URL}" >> "$TITLES_FILE"
-echo "✅ 발행 완료 URL: $PUBLISHED_URL"
+echo "✅ 원고 생성 및 준비 완료: $FINISHED_DIR/${SLUG}.md"
 
 # 발행 성공 카운트 +1
 echo $((CURRENT_COUNT + 1)) > "$COUNT_FILE"
 echo "✅ 완료: $POST_TITLE"
-```[cite: 1]
