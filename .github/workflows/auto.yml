@@ -32,3 +32,10 @@ jobs:
         run: |
           chmod +x daily_batch.sh run.sh
           ./daily_batch.sh "01" 10
+
+      - name: Show error log on failure
+        if: failure()
+        run: |
+          if [ -d "01" ]; then
+            cat 01/daily_log_*.txt || true
+          fi
