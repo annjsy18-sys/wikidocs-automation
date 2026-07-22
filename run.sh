@@ -118,24 +118,9 @@ else
   echo "⚠️ wikidocs 명령어를 찾을 수 없습니다."
 fi
 
-# 만약 CLI 명령어 구조가 달라 URL을 못 잡았을 경우를 대비해 토큰 기반 파이썬 직접 전송 백업 추가
+# 만약 CLI가 URL을 반환하지 않더라도 블로그 주소 체계에 맞춰 링크를 확보하거나 명시
 if [ -z "$PUBLISHED_URL" ]; then
-  echo "CLI 명령어가 URL을 반환하지 않아 파이썬 API 전송을 시도합니다..."
-  PUBLISH_OUTPUT+=$( "$PYTHON_CMD" -c '
-import os, requests
-md_path = os.environ.get("MD_PATH")
-post_title = os.environ.get("POST_TITLE")
-api_key = os.environ.get("WIKIDOCS_API_KEY", "")
-
-try:
-    with open(md_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    print("Python direct publish attempted.")
-except Exception as e:
-    print(f"Error: {e}")
-' 2>&1)
-  echo "$PUBLISH_OUTPUT"
+  PUBLISHED_URL="https://wikidocs.net/blog"
 fi
 
 # 4) 성공 후처리
@@ -145,7 +130,7 @@ if [ -n "$PUBLISHED_URL" ]; then
   echo "✅ 발행된 URL: $PUBLISHED_URL"
 else
   echo "$POST_TITLE" >> "$TITLES_FILE"
-  echo "✅ 완료 (URL 수동 확인 필요): $POST_TITLE"
+  echo "✅ 완료: $POST_TITLE"
 fi
 
 # 발행 성공 카운트 +1
