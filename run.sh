@@ -3,7 +3,7 @@
 #   ./run.sh "01" "세탁세제 TOP5" "퍼실 액체세제" "타이드 파즈 캡슐세제" "아토팜 베이비 세탁세제" "LG 테크 드럼세탁기 전용 세제" "비트 액체세제 리필 대용량"
 #
 # 순서:
-#   1) shared/coupang_api.py로 키워드 검색 → posts/coupang_search_results.json
+#   1) coupang_api.py로 키워드 검색 → posts/coupang_search_results.json
 #   2) claude -p 로 prompt.md + json 데이터를 참고해 원고 작성 → posts/<제목>.md
 #   3) claude -p 로 위키독스 MCP를 통해 발행 → 성공하면 finished/로 이동
 #   4) titles.txt에 오늘 제목 기록 (다음 글이 안 겹치게)
@@ -65,7 +65,7 @@ else
   echo "❌ 사용 가능한 파이썬 명령어를 찾을 수 없습니다 (python / py / python3 모두 실패)."
   exit 1
 fi
-"$PYTHON_CMD" shared/coupang_api.py "${KEYWORDS[@]}" --limit 5 --out "$JSON_PATH"
+"$PYTHON_CMD" coupang_api.py "${KEYWORDS[@]}" --limit 5 --out "$JSON_PATH"
 
 # 2) 원고 작성 (claude -p 헤드리스 모드)
 echo "== 2단계: 원고 작성 =="
