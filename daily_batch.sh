@@ -35,7 +35,8 @@ echo "오늘 ${ALREADY_DONE}개 완료, ${REMAINING}개 더 발행 예정" | tee
 
 # 1) 클로드 코드에게 오늘 쓸 주제+키워드 목록을 정하게 시킴
 echo "== 오늘의 주제 선정 중... ==" | tee -a "$LOG_FILE"
-claude -p "
+
+if claude -p "
 ${BLOG_DIR}/titles.txt 에 있는 기존 제목들과 안 겹치는,
 아직 안 쓴 생활용품/가전 카테고리 세부 키워드로
 오늘 발행할 글 주제 ${REMAINING}개를 정해줘.
@@ -48,10 +49,15 @@ ${BLOG_DIR}/titles.txt 에 있는 기존 제목들과 안 겹치는,
 글제목1|키워드1,키워드2,키워드3,키워드4,키워드5
 글제목2|키워드1,키워드2,키워드3,키워드4,키워드5
 ...
-" --model claude-haiku-4-5 --allowedTools "Read,Write" --permission-mode acceptEdits
+" --model claude-haiku-4-5 --allowedTools "Read,Write" --permission-mode acceptEdits; then
+  echo "클로드 명령 실행 완료"
+else
+  echo "❌ 클로드 명령어 실행 자체 실패" | tee -a "$LOG_FILE"
+  exit 1
+fi
 
 if [ ! -f "${BLOG_DIR}/today_topics.txt" ]; then
-  echo "❌ 주제 파일이 생성되지 않았습니다. 중단합니다." | tee -a "$LOG_FILE"
+  echo "❌ 주제 파일(${BLOG_DIR}/today_topics.txt)이 생성되지 않았습니다. 중단합니다." | tee -a "$LOG_FILE"
   exit 1
 fi
 
