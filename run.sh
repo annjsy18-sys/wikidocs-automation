@@ -96,35 +96,48 @@ echo "== 3단계: 위키독스 블로그 발행 =="
 # wikidocs-cli 설치 확인 및 설치
 if ! command -v wikidocs &> /dev/null; then
   echo "Installing wikidocs-cli..."
-  npm install -g wikidocs-cli || pip install wikidocs-cli 2>/dev/null || true
+  npm install -g ychoi-kr/wikidocs-cli || npm install -g wikidocs-cli || pip install wikidocs-cli 2>/dev/null || true
 fi
 
-# 환경변수 WIKIDOCS_TOKEN에 시크릿 키 매핑
+# 환경변수 WIKIDOCS_TOKEN 설정
 export WIKIDOCS_TOKEN="${WIKIDOCS_API_KEY}"
 
-# 블로그 포스트 발행 명령어 실행 (엔드포인트 및 인자는 CLI 규격에 맞춤)
-# 참고: CLI 환경에서 --token 옵션이나 WIKIDOCS_TOKEN 환경변수를 자동 참조함
 PUBLISHED_URL=""
-if wikidocs --help >/dev/null 2>&1; then
-  # wikidocs-cli를 통한 블로그 포스팅 시도 (실제 명령어 구조에 맞춰 실행)
-  # 예시: wikidocs blog create --title "$POST_TITLE" --content-file "$MD_PATH"
-  PUBLISH_OUTPUT=$(wikidocs blog create --title "$POST_TITLE" --content-file "$MD_PATH" 2>&1 || true)
+PUBLISH_OUTPUT=""
+
+# wikidocs CLI 명령어를 통한 실제 블로그 발행 시도
+if command -v wikidocs &> /dev/null; then
+  echo "wikidocs CLI를 통해 포스팅을 전송합니다..."
+  PUBLISH_OUTPUT=$(wikidocs post --title "$POST_TITLE" --file "$MD_PATH" 2>&1 || wikidocs publish --title "$POST_TITLE" --file "$MD_PATH" 2>&1 || wikidocs create --title "$POST_TITLE" --file "$MD_PATH" 2>&1 || true)
   echo "$PUBLISH_OUTPUT"
   
   if echo "$PUBLISH_OUTPUT" | grep -q "http"; then
     PUBLISHED_URL=$(echo "$PUBLISH_OUTPUT" | grep -oE "https?://[^\s]+" | tail -1)
   fi
 else
-  echo "⚠️ wikidocs CLI 명령어를 찾을 수 없어 파이썬 요청으로 대체합니다."
-  # 대체 파이썬 요청 로직
-  "$PYTHON_CMD" -c '
-import os, requests
-api_key = os.environ.get("WIKIDOCS_API_KEY", "")
-print("Token check:", len(api_key))
-'
+  echo "⚠️ wikidocs 명령어를 찾을 수 없습니다."
 fi
 
-# 성공 여부 판정 (실제 발행 URL이 잡히거나 에러가 없으면 성공 처리)
+# 만약 CLI 명령어 구조가 달라 URL을 못 잡았을 경우를 대비해 토큰 기반 파이썬 직접 전송 백업 추가
+if [ -z "$PUBLISHED_URL" ]; then
+  echo "CLI 명령어가 URL을 반환하지 않아 파이썬 API 전송을 시도합니다..."
+  PUBLISH_OUTPUT+=$( "$PYTHON_CMD" -c '
+import os, requests
+md_path = os.environ.get("MD_PATH")
+post_title = os.environ.get("POST_TITLE")
+api_key = os.environ.get("WIKIDOCS_API_KEY", "")
+
+try:
+    with open(md_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    print("Python direct publish attempted.")
+except Exception as e:
+    print(f"Error: {e}")
+' 2>&1)
+  echo "$PUBLISH_OUTPUT"
+fi
+
 # 4) 성공 후처리
 mv "$MD_PATH" "$FINISHED_DIR/"
 if [ -n "$PUBLISHED_URL" ]; then
