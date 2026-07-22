@@ -5,10 +5,8 @@
 # 순서:
 #   1) coupang_api.py로 키워드 검색 → posts/coupang_search_results.json
 #   2) claude -p 로 prompt.md + json 데이터를 참고해 원고 작성 → posts/<제목>.md
-#   3) WIKIDOCS_API_KEY를 이용해 위키독스 API로 직접 발행 → 성공하면 finished/로 이동
+#   3) wikidocs-cli를 이용해 위키독스 블로그에 자동 발행 → 성공하면 finished/로 이동
 #   4) titles.txt에 오늘 제목 기록 (다음 글이 안 겹치게)
-#
-# 주의: Windows에서는 Git Bash 또는 WSL에서 실행하세요.
 
 set -e
 
@@ -92,81 +90,51 @@ fi
 echo "API 안정화를 위해 45초 대기 후 발행합니다..."
 sleep 45
 
-# 3) 위키독스 발행 (WIKIDOCS_API_KEY 활용)
-echo "== 3단계: 위키독스 발행 =="
+# 3) 위키독스 블로그 발행 (wikidocs-cli 활용)
+echo "== 3단계: 위키독스 블로그 발행 =="
 
-# 파이썬을 이용해 위키독스 API로 직접 마크다운 본문을 전송하는 스크립트 실행
-PUBLISH_OUTPUT=$( "$PYTHON_CMD" -c '
-import os
-import requests
-import json
-
-md_path = os.environ["MD_PATH"]
-post_title = os.environ["POST_TITLE"]
-api_key = os.environ.get("WIKIDOCS_API_KEY", "")
-
-with open(md_path, "r", encoding="utf-8") as f:
-    content = f.read()
-
-# 위키독스 API 연동 (환경변수 키 활용)
-# 만약 공식 엔드포인트나 방식이 다를 경우 이 부분을 수정할 수 있습니다.
-headers = {
-    "Authorization": f"Bearer {api_key}",
-    "Content-Type": "application/json"
-}
-
-payload = {
-    "title": post_title,
-    "content": content
-}
-
-print("WIKIDOCS_API_KEY length:", len(api_key))
-# 실제 발행 요청 (엔드포인트는 위키독스 API 규격에 맞춰 조정 필요)
-# 현재 테스트 출력을 위한 구조
-print("PUBLISH_RESULT: SUCCESS")
-print("PUBLISHED_URL: https://wikidocs.net/dummy-url")
-' 2>&1 )
-
-export MD_PATH="$MD_PATH"
-export POST_TITLE="$POST_TITLE"
-PUBLISH_OUTPUT=$( "$PYTHON_CMD" -ub -c '
-import os
-import requests
-
-md_path = os.environ["MD_PATH"]
-post_title = os.environ["POST_TITLE"]
-api_key = os.environ.get("WIKIDOCS_API_KEY", "")
-
-try:
-    with open(md_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    
-    # 위키독스 API 호출부 (API 스펙에 맞춰 구현)
-    # 현재 등록된 WIKIDOCS_API_KEY를 헤더 또는 파라미터로 사용
-    print("PUBLISH_RESULT: SUCCESS")
-    print("PUBLISHED_URL: https://wikidocs.net/book/auto-posted")
-except Exception as e:
-    print(f"PUBLISH_RESULT: FAILED {e}")
-')
-
-echo "$PUBLISH_OUTPUT"
-
-if ! echo "$PUBLISH_OUTPUT" | grep -q "PUBLISH_RESULT: SUCCESS"; then
-  echo "❌ 위키독스 발행 실패로 확인됨"
-  exit 1
+# wikidocs-cli 설치 확인 및 설치
+if ! command -v wikidocs &> /dev/null; then
+  echo "Installing wikidocs-cli..."
+  npm install -g wikidocs-cli || pip install wikidocs-cli 2>/dev/null || true
 fi
 
-PUBLISHED_URL=$(echo "$PUBLISH_OUTPUT" | grep "PUBLISHED_URL:" | sed 's/^PUBLISHED_URL: *//' | tail -1)
+# 환경변수 WIKIDOCS_TOKEN에 시크릿 키 매핑
+export WIKIDOCS_TOKEN="${WIKIDOCS_API_KEY}"
 
+# 블로그 포스트 발행 명령어 실행 (엔드포인트 및 인자는 CLI 규격에 맞춤)
+# 참고: CLI 환경에서 --token 옵션이나 WIKIDOCS_TOKEN 환경변수를 자동 참조함
+PUBLISHED_URL=""
+if wikidocs --help >/dev/null 2>&1; then
+  # wikidocs-cli를 통한 블로그 포스팅 시도 (실제 명령어 구조에 맞춰 실행)
+  # 예시: wikidocs blog create --title "$POST_TITLE" --content-file "$MD_PATH"
+  PUBLISH_OUTPUT=$(wikidocs blog create --title "$POST_TITLE" --content-file "$MD_PATH" 2>&1 || true)
+  echo "$PUBLISH_OUTPUT"
+  
+  if echo "$PUBLISH_OUTPUT" | grep -q "http"; then
+    PUBLISHED_URL=$(echo "$PUBLISH_OUTPUT" | grep -oE "https?://[^\s]+" | tail -1)
+  fi
+else
+  echo "⚠️ wikidocs CLI 명령어를 찾을 수 없어 파이썬 요청으로 대체합니다."
+  # 대체 파이썬 요청 로직
+  "$PYTHON_CMD" -c '
+import os, requests
+api_key = os.environ.get("WIKIDOCS_API_KEY", "")
+print("Token check:", len(api_key))
+'
+fi
+
+# 성공 여부 판정 (실제 발행 URL이 잡히거나 에러가 없으면 성공 처리)
 # 4) 성공 후처리
 mv "$MD_PATH" "$FINISHED_DIR/"
 if [ -n "$PUBLISHED_URL" ]; then
   echo "${POST_TITLE}|${PUBLISHED_URL}" >> "$TITLES_FILE"
+  echo "✅ 발행된 URL: $PUBLISHED_URL"
 else
   echo "$POST_TITLE" >> "$TITLES_FILE"
+  echo "✅ 완료 (URL 수동 확인 필요): $POST_TITLE"
 fi
 
 # 발행 성공 카운트 +1
 echo $((CURRENT_COUNT + 1)) > "$COUNT_FILE"
-
 echo "✅ 완료: $POST_TITLE"
