@@ -151,3 +151,4 @@ fi
 # 발행 성공 카운트 +1
 echo $((CURRENT_COUNT + 1)) > "$COUNT_FILE"
 echo "✅ 완료: $POST_TITLE"
+```[cite: 1]
