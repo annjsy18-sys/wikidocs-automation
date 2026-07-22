@@ -3,8 +3,8 @@
 #   ./run.sh "01" "세탁세제 TOP5" "퍼실 액체세제" "타이드 파즈 캡슐세제" "아토팜 베이비 세탁세제" "LG 테크 드럼세탁기 전용 세제" "비트 액체세제 리필 대용량"
 #
 # 순서:
-#   1) shared/coupang_api.py로 키워드 검색 → posts/coupang_search_results.json
-#   2) claude -p 로 prompt.md + json 데이터를 참고해 원고 작성 → posts/<제목>.md
+#   1) shared/coupang_api.py로 키워드 검색 (limit 3으로 축소) → posts/coupang_search_results.json
+#   2) claude -p 로 prompt.md + 간소화된 json 데이터를 참고해 원고 작성 → posts/<제목>.md
 #   3) claude -p 로 위키독스 MCP를 통해 발행 → 성공하면 finished/로 이동
 #   4) titles.txt에 오늘 제목 기록 (다음 글이 안 겹치게)
 #
@@ -51,7 +51,7 @@ if grep -qF "$POST_TITLE" "$TITLES_FILE" 2>/dev/null; then
   exit 1
 fi
 
-# 1) 쿠팡 상품 검색
+# 1) 쿠팡 상품 검색 (토큰 절감을 위해 --limit 3으로 축소)
 echo "== 1단계: 쿠팡 상품 검색 =="
 if command -v python >/dev/null 2>&1 && python --version >/dev/null 2>&1; then
   PYTHON_CMD="python"
@@ -66,83 +66,56 @@ fi
 
 # 윈도우 경로 호환성을 위해 cygpath 활용
 API_SCRIPT_PATH=$(cygpath -w "./shared/coupang_api.py" 2>/dev/null || echo "./shared/coupang_api.py")
-"$PYTHON_CMD" "$API_SCRIPT_PATH" "${KEYWORDS[@]}" --limit 5 --out "$JSON_PATH_WIN"
+"$PYTHON_CMD" "$API_SCRIPT_PATH" "${KEYWORDS[@]}" --limit 3 --out "$JSON_PATH_WIN"
 
-# 2) 원고 작성 (claude -p 헤드리스 모드)
+# 2) 원고 작성 (claude -p 헤드리스 모드 - 하이쿠 모델 적용)
 echo "== 2단계: 원고 작성 =="
 
 EXTRA_PRODUCT_INSTRUCTION="
-추가 상품 추천: 스토어 링크(### 소제목) 바로 위에, 오늘 글에서 이미
-소개한 상품들과는 다른 상품을 ${JSON_PATH}에서 하나 더 골라줘
-(같은 키워드의 다른 순위 상품이거나, 다른 키워드의 상품이어도 됨.
-품절 상품은 고르지 않는다). 아래 형식으로 자연스럽게 한 줄 넣어줘:
+추가 상품 추천: 소제목 바로 위에, 오늘 글에서 이미 소개한 상품들과는 다른 상품을 ${JSON_PATH}에서 하나 더 골라줘 (품절 상품 제외). 아래 형식으로 한 줄 넣어줘:
 '💡 이런 것도 함께 보면 좋아요: [<상품명>](productUrl 값)'
-JSON에 쓸 만한 다른 상품이 전혀 없으면 이 항목은 생략해도 된다.
 "
 
 claude -p "
-${BLOG_DIR}/prompt.md 의 글쓰기 규칙을 그대로 지켜서
-'${POST_TITLE}' 글을 작성해줘.
+${BLOG_DIR}/prompt.md 의 규칙에 따라 '${POST_TITLE}' 글을 작성해줘.
 
-입력 데이터: ${JSON_PATH} 파일을 읽어서 각 키워드의 rank=1 상품을 기본으로 사용해줘.
-- productName, productImage, productUrl은 이 파일 값을 그대로 써야 해. 지어내지 마.
-- 이미지는 productImage에 있는 쿠팡 원본 URL을 그대로 마크다운 문법
-  ![상품명](productImage 값) 으로 넣어줘 (재호스팅 하지 마). <img> 같은
-  HTML 태그는 위키독스에서 안 보이니 절대 쓰지 마.
-- 품절/재고 없는 상품은 추천 목록에서 제외해줘.
-- 저장하기 전에 글 전체를 한 번 더 읽어보면서 오탈자, 비문, 어색한 조사
-  사용이 없는지 스스로 검토하고 고쳐줘.
+입력 데이터(${JSON_PATH})의 rank=1 상품을 기본으로 사용하되, 파일의 상품명, 이미지URL, 상품URL 값을 그대로 정확히 써서 ${MD_PATH} 로 저장해줘. (<img> 등 HTML 태그 금지, 마크다운 이미지 사용)
 ${EXTRA_PRODUCT_INSTRUCTION}
-완료되면 결과를 ${MD_PATH} 로 저장해줘.
 " --model claude-haiku-4-5 --allowedTools "Read,Write" --permission-mode acceptEdits
 
 if [ ! -f "$MD_PATH" ]; then
   echo "❌ 원고 파일이 생성되지 않았습니다: $MD_PATH"
-  echo "   (성공했다고 나와도 실제로 파일이 없으면 실패로 처리)"
   exit 1
 fi
 
-echo "API 안정화를 위해 45초 대기 후 발행합니다..."
-sleep 45
+echo "API 안정화를 위해 30초 대기 후 발행합니다..."
+sleep 30
 
-# 3) 위키독스 발행
+# 3) 위키독스 발행 (하이쿠 모델 적용 및 프롬프트 압축으로 입력 토큰 절감)
 echo "== 3단계: 위키독스 발행 =="
 PUBLISH_OUTPUT=$(claude -p "
-${MD_PATH} 파일 내용으로 위키독스 블로그 글을 등록해줘.
-제목은 '${POST_TITLE}'로 정확히 등록해줘 (본문 안에 제목을 H2로 중복해서 넣지 마).
+${MD_PATH} 내용을 위키독스 블로그에 제목 '${POST_TITLE}'로 등록해줘. (본문 내 H2 제목 중복 생성 금지)
 
-태그는 아래 기준으로 글 내용을 보고 자동으로 생성해서 설정해줘:
-- '생활용품'은 항상 포함
-- 글에서 다루는 상품 카테고리 (예: 제습기, 선풍기, 세탁세제 등)
-- 계절/상황 키워드 (예: 여름가전, 장마, 캠핑 등 글 내용에 맞는 것)
-- 쿠팡파트너스는 절대 넣지 않는다
-총 5~7개 태그를 설정해줘. 태그 설정 후 실제로 붙어있는지 확인하고,
-안 붙으면 이유를 PUBLISH_RESULT 뒤에 간단히 남겨줘 (예: 태그 미적용-이유설명).
+- 태그: '생활용품' 포함 총 5~7개 자동 생성 (쿠팡파트너스 태그 금지)
+- 필수 검수: 대가성 문구(> 형식) 상하단 배치 확인, 상품 이미지 마크다운(![]()) 변환 확인.
 
-발행 전에 대가성 문구가 본문 맨 첫 줄에 인용구(blockquote, '>' 기호) 형식으로,
-너무 크지 않은 일반 텍스트 크기로 들어가 있는지, 하단에도 한 번 더 있는지 확인해줘.
-본문에 상품 이미지가 마크다운 이미지 문법(![]())으로 들어가 있는지, img 같은 HTML
-태그가 그대로 텍스트로 남아있지 않은지도 확인해줘 (있다면 마크다운 문법으로 고쳐줘).
-
-중요: 위키독스 MCP 도구를 실제로 호출해서 글을 등록해야 해.
-글이 실제로 등록됐는지 최종 확인한 뒤, 반드시 아래 형식으로
-응답의 마지막 두 줄에 결과를 적어줘 (다른 텍스트 없이 이 형식 그대로):
-- 성공하면:
+중요: 위키독스 MCP 도구를 실제로 호출해 등록하고, 응답 마지막 두 줄에 아래 형식만 출력해줘:
+- 성공 시:
   PUBLISH_RESULT: SUCCESS
-  PUBLISHED_URL: <실제 등록된 글의 전체 URL>
-- 실패하거나 MCP 도구를 쓸 수 없으면:
+  PUBLISHED_URL: <전체 URL>
+- 실패 시:
   PUBLISH_RESULT: FAILED <이유>
 " --model claude-haiku-4-5 --allowedTools "Read,mcp__wikidocs__*" --permission-mode acceptEdits)
 
 echo "$PUBLISH_OUTPUT"
 
 if ! echo "$PUBLISH_OUTPUT" | grep -q "PUBLISH_RESULT: SUCCESS"; then
-  echo "❌ 위키독스 발행 실패로 확인됨 (finished로 옮기지 않음)"
-  echo "$PUBLISH_OUTPUT" | grep "PUBLISH_RESULT" || echo "   (PUBLISH_RESULT 마커를 찾지 못함 — MCP 권한 문제일 수 있음)"
+  echo "❌ 위키독스 발행 실패로 확인됨"
+  echo "$PUBLISH_OUTPUT" | grep "PUBLISH_RESULT" || echo "   (PUBLISH_RESULT 마커를 찾지 못함)"
 
   if echo "$PUBLISH_OUTPUT" | grep -q "발행 가능 건수"; then
     echo "$DAILY_LIMIT" > "$COUNT_FILE"
-    echo "⏸️  하루 발행 제한에 도달한 것으로 보입니다. 오늘은 더 이상 시도하지 않습니다."
+    echo "⏸️  하루 발행 제한 도달."
   fi
 
   exit 1
