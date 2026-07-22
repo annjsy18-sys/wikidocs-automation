@@ -31,11 +31,5 @@ jobs:
           WIKIDOCS_API_KEY: ${{ secrets.WIKIDOCS_API_KEY }}
         run: |
           chmod +x daily_batch.sh run.sh
-          ./daily_batch.sh "01" 10
-
-      - name: Show error log on failure
-        if: failure()
-        run: |
-          if [ -d "01" ]; then
-            cat 01/daily_log_*.txt || true
-          fi
+          set -e
+          ./daily_batch.sh "01" 10 || (echo "=== LOG FILE CONTENT ===" && cat 01/daily_log_*.txt 2>/dev/null || echo "No log file found")
