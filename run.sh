@@ -95,7 +95,8 @@ echo "== 3단계: 위키독스 블로그 발행 =="
 
 PUBLISHED_URL="https://wikidocs.net/blog/@hiru/"
 
-"$PYTHON_CMD" -c '
+# 환경변수를 명확히 전달하도록 수정
+MD_PATH="$MD_PATH" POST_TITLE="$POST_TITLE" WIKIDOCS_API_KEY="$WIKIDOCS_API_KEY" "$PYTHON_CMD" -c '
 import os
 import requests
 
@@ -104,23 +105,26 @@ post_title = os.environ.get("POST_TITLE")
 api_key = os.environ.get("WIKIDOCS_API_KEY", "")
 
 try:
-    with open(md_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "title": post_title,
-        "content": content
-    }
-    
-    response = requests.post("https://wikidocs.net/api/v1/blog/post", json=data, headers=headers)
-    if response.status_code in [200, 201]:
-        print("✅ 파이썬 API 블로그 전송 성공")
+    if not md_path or not os.path.exists(md_path):
+        print(f"❌ 마크다운 파일을 찾을 수 없습니다: {md_path}")
     else:
-        print(f"⚠️ API 응답 코드: {response.status_code} - {response.text}")
+        with open(md_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "title": post_title,
+            "content": content
+        }
+        
+        response = requests.post("https://wikidocs.net/api/v1/blog/post", json=data, headers=headers)
+        if response.status_code in [200, 201]:
+            print("✅ 파이썬 API 블로그 전송 성공")
+        else:
+            print(f"⚠️ API 응답 코드: {response.status_code} - {response.text}")
 except Exception as e:
     print(f"❌ 발행 중 예외 발생: {e}")
 '
@@ -133,3 +137,4 @@ echo "✅ 발행 완료 URL: $PUBLISHED_URL"
 # 발행 성공 카운트 +1
 echo $((CURRENT_COUNT + 1)) > "$COUNT_FILE"
 echo "✅ 완료: $POST_TITLE"
+```[cite: 1]
