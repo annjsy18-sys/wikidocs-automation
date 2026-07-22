@@ -20,6 +20,7 @@ echo "== $(date) 배치 시작: 목표 ${TARGET_COUNT}개 ==" >> "$LOG_FILE"
 TODAY=$(date +%Y-%m-%d)
 ALREADY_DONE=$(grep -c "^\[$TODAY\]" "$TITLES_FILE" 2>/dev/null || true)
 ALREADY_DONE="${ALREADY_DONE:-0}"
+# grep -c가 여러 줄/빈 값을 반환하는 경우 대비, 숫자가 아니면 0으로 강제
 case "$ALREADY_DONE" in
   ''|*[!0-9]*) ALREADY_DONE=0 ;;
 esac
@@ -34,8 +35,7 @@ echo "오늘 ${ALREADY_DONE}개 완료, ${REMAINING}개 더 발행 예정" | tee
 
 # 1) 클로드 코드에게 오늘 쓸 주제+키워드 목록을 정하게 시킴
 echo "== 오늘의 주제 선정 중... ==" | tee -a "$LOG_FILE"
-
-if claude -p "
+claude -p "
 ${BLOG_DIR}/titles.txt 에 있는 기존 제목들과 안 겹치는,
 아직 안 쓴 생활용품/가전 카테고리 세부 키워드로
 오늘 발행할 글 주제 ${REMAINING}개를 정해줘.
@@ -48,19 +48,14 @@ ${BLOG_DIR}/titles.txt 에 있는 기존 제목들과 안 겹치는,
 글제목1|키워드1,키워드2,키워드3,키워드4,키워드5
 글제목2|키워드1,키워드2,키워드3,키워드4,키워드5
 ...
-" --model claude-haiku-4-5 --allowedTools "Read,Write" --permission-mode acceptEdits; then
-  echo "클로드 명령 실행 완료"
-else
-  echo "❌ 클로드 명령어 실행 자체 실패" | tee -a "$LOG_FILE"
-  exit 1
-fi
+" --model claude-haiku-4-5 --allowedTools "Read,Write" --permission-mode acceptEdits
 
 if [ ! -f "${BLOG_DIR}/today_topics.txt" ]; then
-  echo "❌ 주제 파일(${BLOG_DIR}/today_topics.txt)이 생성되지 않았습니다. 중단합니다." | tee -a "$LOG_FILE"
+  echo "❌ 주제 파일이 생성되지 않았습니다. 중단합니다." | tee -a "$LOG_FILE"
   exit 1
 fi
 
-# 2) 한 줄씩 읽어서 run.sh 반복 실행 (로그가 화면에 바로 보이도록 tee 활용)
+# 2) 한 줄씩 읽어서 run.sh 반복 실행
 COUNT=0
 while IFS='|' read -r TITLE KEYWORDS_RAW; do
   [ -z "$TITLE" ] && continue
@@ -68,22 +63,22 @@ while IFS='|' read -r TITLE KEYWORDS_RAW; do
     break
   fi
 
+  # 쉼표로 구분된 키워드를 배열로 변환
   IFS=',' read -ra KEYWORDS <<< "$KEYWORDS_RAW"
 
   echo "== [$((COUNT+1))/${REMAINING}] '$TITLE' 발행 시작 ==" | tee -a "$LOG_FILE"
 
-  # 수정됨: 에러가 숨겨지지 않고 화면과 로그 파일에 동시에 출력되도록 변경
-  if ./run.sh "$BLOG_DIR" "$TITLE" "${KEYWORDS[@]}" 2>&1 | tee -a "$LOG_FILE"; then
+  if ./run.sh "$BLOG_DIR" "$TITLE" "${KEYWORDS[@]}" >> "$LOG_FILE" 2>&1; then
     echo "[$TODAY] $TITLE" >> "$TITLES_FILE"
     echo "✅ 성공: $TITLE" | tee -a "$LOG_FILE"
     COUNT=$((COUNT+1))
   else
     echo "❌ 실패: $TITLE (로그 확인: $LOG_FILE)" | tee -a "$LOG_FILE"
-    exit 1
   fi
 
+  # 너무 기계적으로 보이지 않게, 기본 60초 + 무작위 0~60초 추가 대기
   if [ "$COUNT" -lt "$REMAINING" ]; then
-    WAIT=$((180 + RANDOM % 60))
+    WAIT=$((180 + RANDOM % 60))  # 180초~240초(3~4분) 대기 — API TPM 제한 안전마진
     echo "다음 글까지 ${WAIT}초 대기..." | tee -a "$LOG_FILE"
     sleep "$WAIT"
   fi
