@@ -74,6 +74,9 @@ while IFS='|' read -r TITLE KEYWORDS_RAW; do
     COUNT=$((COUNT+1))
   else
     echo "❌ 실패: $TITLE (로그 확인: $LOG_FILE)" | tee -a "$LOG_FILE"
+    echo "=== 🚨 상세 에러 로그 내용 ==="
+    cat "$LOG_FILE"
+    exit 1
   fi
 
   # 너무 기계적으로 보이지 않게, 기본 60초 + 무작위 0~60초 추가 대기
